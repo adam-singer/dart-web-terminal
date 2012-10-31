@@ -274,7 +274,9 @@ class Terminal {
   
   cdCommand(String cmd, List<String> args) {
     args = args == null ? [""] : args;
-    var dest = args.toString();
+    StringBuffer sb = new StringBuffer();
+    sb.addAll(args);
+    var dest = sb.toString();
     if (dest.isEmpty) {
       dest = '/';
     }
