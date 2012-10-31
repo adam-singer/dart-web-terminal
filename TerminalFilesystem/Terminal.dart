@@ -2,7 +2,7 @@
 // DOMFileSystem fs = filesystem; // XXX: dart:html should export this as FileSystem
 // errorCallback: (e) {}); // XXX: getDirectory does not expose errorCallback, file bug. 
 // print(filesystem.runtimeType); // XXX: does not work on compiling to javascript
-
+// srcDirEntry.moveTo(destDirEntry); XXX: moveTo complains about incorrect parameters. 
 class Terminal {
 
   DOMFileSystem fs;
@@ -29,6 +29,7 @@ class Terminal {
                   'ls':lsCommand,
                   'mkdir':mkdirCommand,
                   'mv':mvCommand,
+                  'cp':mvCommand,
                   'open':openCommand,
                   'pwd':pwdCommand,
                   'rm':rmCommand,
@@ -194,6 +195,9 @@ class Terminal {
       case FileError.INVALID_STATE_ERR:
         msg = 'INVALID_STATE_ERR';
         break;
+      case FileError.TYPE_MISMATCH_ERR:
+        msg = 'TYPE_MISMATCH_ERR';
+        break;
       default:
         msg = 'Unknown Error';
         break;
@@ -244,7 +248,7 @@ class Terminal {
   helpCommand(var cmd, var args) {
     StringBuffer sb = new StringBuffer();
     sb.add('<div class="ls-files">');
-    CMDS.getKeys().forEach((var k) {
+    CMDS.keys.forEach((var k) {
       sb.add('${k}<br>');
     });
     sb.add('</div>');
@@ -252,16 +256,16 @@ class Terminal {
     writeOutput(sb.toString());
   }
   
-  versionCommand(var cmd, var args) {
+  versionCommand(String cmd, var args) {
     writeOutput("${VERSION}");
   }
   
-  catCommand(var cmd, var args) {
+  catCommand(String cmd, var args) {
     if (args.length >= 1) {
       var fileName = args[0];      
       if (fileName is String) {
         writeOutput('fileName=${fileName}');
-        read(cmd,fileName, (var result) {
+        read(cmd, fileName, (var result) {
           writeOutput('<pre> ${result} </pre>');
         });
       } else {
@@ -292,7 +296,7 @@ class Terminal {
         });
   }
   
-  dateCommand(var cmd, var args) {
+  dateCommand(String cmd, var args) {
     writeOutput(new Date.now().toLocal().toString());
   }
   
@@ -419,15 +423,97 @@ class Terminal {
     }
   }
   
-  mvCommand(var cmd, var args) {
+  mvCommand(String cmd, List<String> args) {
+    if (args.length != 2) {
+      writeOutput('usage: $cmd source target<br>'
+                  '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$cmd'
+                  ' source directory/');
+      return;
+    }
     
+    var src = args[0];
+    var dest = args[1];
+    
+    Function runAction = (c, srcDirEntry, destDirEntry, [opt_newName = null]) {
+      var newName = "";
+      if (opt_newName != null) newName = opt_newName;
+      
+      if (c == 'mv') {
+        srcDirEntry.moveTo(destDirEntry); 
+        // XXX: moveTo complains about incorrect parameters. 
+//            name: destDirEntry.name,
+//            // UNIX doesn't display output on successful move.
+//            successCallback: (e) { return; },
+//            errorCallback: (e) => errorHandler(e) 
+//            );
+      } else { // c=='cp'
+        srcDirEntry.copyTo(destDirEntry);
+        // XXX: copyTo complains about incorrect parameters. 
+//        name: destDirEntry.name,
+//            // UNIX doesn't display output on successful move.
+//            successCallback: (e) {},
+//            errorCallback: (e) => errorHandler(e) 
+//            );
+      }
+    };
+    
+    // Moving to a folder? (e.g. second arg ends in '/').
+    if (dest[dest.length - 1] == '/') {
+      cwd.getDirectory(src, 
+          options: {}, 
+          successCallback: (srcDirEntry){
+            // Create blacklist for dirs we can't re-create.
+            var create = ['.', './', '..', '../', '/'].indexOf(dest) != -1 ? false : true;
+            
+            cwd.getDirectory(dest, 
+                options: {'create': create}, 
+                successCallback: (destDirEntry) => runAction(cmd, srcDirEntry, destDirEntry), 
+                errorCallback: (error) => errorHandler(error));
+          }, 
+          errorCallback: (error) => errorHandler(error));
+    } else { // Treat src/destination as files.
+      cwd.getFile(src, options: {}, 
+          successCallback: (srcFileEntry) {
+            srcFileEntry.getParent((parentDirEntry) => runAction(cmd, srcFileEntry, parentDirEntry, dest),
+                (error) => errorHandler(error));
+          }, 
+          errorCallback: (error) => errorHandler(error));
+    }
   }
   
-  openCommand(var cmd, var args) {
+  openCommand(String cmd, List<String> args) {
+    StringBuffer sb = new StringBuffer();
+    sb.addAll(args);
+    var fileName = sb.toString();
     
+    if (fileName.isEmpty) {
+      writeOutput('usage: $cmd filename');
+      return;
+    }
+    
+    open(cmd, fileName, (fileEntry) {
+      var myWin = window.open(fileEntry.toURL(), 'mywin');
+    });
   }
   
-  pwdCommand(var cmd, var args) {
+  open(String cmd, String path, successCallback) {
+    if (fs == null) {
+      return;
+    }
+    
+    cwd.getFile(path, 
+        options: {}, 
+        successCallback: successCallback, 
+        errorCallback: (e) {
+          if (e.code == FileError.NOT_FOUND_ERR) {
+            writeOutput('$cmd: $path: No such file or directory<br>');
+          } else {
+            errorHandler(e);
+          }
+        });
+  }
+  
+  pwdCommand(String cmd, List<String> args) {
     writeOutput(cwd.fullPath);
   }
   
