@@ -14,6 +14,7 @@ class Terminal {
   InputElement input;
   DivElement cmdLine;
   final VERSION = '0.0.1';
+  final THEMES = ['default', 'cream'];
   Map CMDS;
   Terminal(this.cmdLineContainer,this.outputContainer, this.cmdLineInput) {
     cmdLine = document.query(cmdLineContainer);
@@ -597,7 +598,18 @@ class Terminal {
   }
   
   themeCommand(String cmd, List<String> args) {
-    
+    StringBuffer sb = new StringBuffer();
+    sb.addAll(args);
+    var theme = sb.toString();
+    if (theme.isEmpty) {
+      writeOutput('usage: $cmd ${THEMES}');
+    } else {
+      if (THEMES.contains(theme)) {
+        setTheme(theme);
+      } else {
+        writeOutput('Error - Unrecognized theme used');
+      }
+    }
   }
   
   whoCommand(var cmd, var args) {
