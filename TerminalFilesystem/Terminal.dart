@@ -246,8 +246,29 @@ class Terminal {
     });
   }
   
-  read(var cmd, var fileName, var callback) {
+  read(String cmd, String path, var callback) {
+    if (fs == null) {
+      return;
+    }
     
+    cwd.getFile(path, 
+        options: {}, 
+        successCallback: (FileEntry fileEntry) {
+          fileEntry.file((file) {
+            var reader = new FileReader();
+            reader.on.loadEnd.add((ProgressEvent e)=>callback(reader.result));
+            reader.readAsText(file);
+          }, (e) => errorHandler(e));
+        }, 
+        errorCallback: (e) {
+          if (e.code == FileError.INVALID_STATE_ERR) {
+            writeOutput('$cmd: $path: is a directory<br>');
+          } else if (e.code == FileError.NOT_FOUND_ERR) {
+            writeOutput('$cmd: $path: No such file or directory<br>');
+          } else {
+            errorHandler(e);
+          }
+        });
   }
   
   clearCommand(var cmd, var args) {
@@ -274,7 +295,7 @@ class Terminal {
     if (args.length >= 1) {
       var fileName = args[0];      
       if (fileName is String) {
-        writeOutput('fileName=${fileName}');
+        //writeOutput('fileName=${fileName}');
         read(cmd, fileName, (var result) {
           writeOutput('<pre> ${result} </pre>');
         });
