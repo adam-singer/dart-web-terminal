@@ -233,7 +233,17 @@ class Terminal {
   }
   
   void addDroppedFiles(List<File> files) {
-    
+    files.forEach((file) {
+      cwd.getFile(file.name, 
+          options: {'create': true, 'exclusive': true}, 
+          successCallback: (FileEntry fileEntry) {
+            fileEntry.createWriter((FileWriter fileWriter) {
+              fileWriter.on.error.add((e)=>errorHandler(e));
+              fileWriter.write(file);
+            }, (e) => errorHandler(e));
+          }, 
+          errorCallback: (e) => errorHandler(e));
+    });
   }
   
   read(var cmd, var fileName, var callback) {
