@@ -548,15 +548,55 @@ class Terminal {
     writeOutput(cwd.fullPath);
   }
   
-  rmCommand(var cmd, var args) {
+  rmCommand(String cmd, List<String> args) {
+    // Remove recursively? If so, remove the flag(s) from the arg list.
+    var recursive = false;
+    ['-r', '-f', '-rf', '-fr'].forEach((arg) {
+      var index = args.indexOf(arg);
+      if (index != -1) {
+        args.removeAt(index);
+        recursive = true;
+      }
+    });
     
+    args.forEach((fileName) {
+      cwd.getFile(fileName, options: {}, 
+          successCallback: (fileEntry) {
+            fileEntry.remove(() {}, (e) => errorHandler(e)); 
+          }, 
+          errorCallback: (e){
+            if (recursive && e.code == FileError.TYPE_MISMATCH_ERR) {
+              cwd.getDirectory(fileName, 
+                  options:{}, 
+                  successCallback: (DirectoryEntry dirEntry) => dirEntry.removeRecursively(() {}, (e) => errorHandler(e)), 
+                  errorCallback: (e) => errorHandler(e));
+            } else if (e.code == FileError.INVALID_STATE_ERR) {
+              writeOutput('$cmd: $fileName: is a directory<br>');
+            } else {
+              errorHandler(e);
+            }
+          });
+    });
   }
   
-  rmdirCommand(var cmd, var args) {
-    
+  rmdirCommand(String cmd, List<String> args) {
+    args.forEach((dirName) {
+      cwd.getDirectory(dirName, 
+          options: {}, 
+          successCallback: (dirEntry) {
+            dirEntry.remove((){}, (e) {
+              if (e.code == FileError.INVALID_MODIFICATION_ERR) {
+                writeOutput('$cmd: $dirName: Directory not empty<br>');
+              } else {
+                errorHandler(e);
+              }
+            }); 
+          }, 
+          errorCallback: (e) => invalidOpForEntryType(e, cmd, dirName));
+    });
   }
   
-  themeCommand(var cmd, var args) {
+  themeCommand(String cmd, List<String> args) {
     
   }
   
