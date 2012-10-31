@@ -1,10 +1,14 @@
+// BUGS TO FILE:
+// DOMFileSystem fs = filesystem; // XXX: dart:html should export this as FileSystem
+// errorCallback: (e) {}); // XXX: getDirectory does not expose errorCallback, file bug. 
+// print(filesystem.runtimeType); // XXX: does not work on compiling to javascript
 
 class Terminal {
 
   final cmdLineContainer;
   final outputContainer;
   final cmdLineInput; 
-  DivElement output;
+  OutputElement output;
   InputElement input;
   DivElement cmdLine;
   final VERSION = '0.0.1';
@@ -84,7 +88,7 @@ class Terminal {
         
         input = document.query(cmdLineInput);
         
-        if (input.value is String && !input.value.isEmpty()) {
+        if (input.value is String && !input.value.isEmpty) {
           history.add(input.value);
           histpos = history.length;
         }
@@ -119,7 +123,7 @@ class Terminal {
         if (CMDS[cmd] is Function) {
           CMDS[cmd](cmd,args);
         } else {
-          output.insertAdjacentHTML('beforeEnd', '${cmd}: command not found');
+          writeOutput('${cmd}: command not found');
         }
            
         window.scrollTo(0, window.innerHeight); 
@@ -128,10 +132,92 @@ class Terminal {
     }, false);
   }
   
-  initFS(var persistent, var size) {
+  void initFS(bool persistent, int size) {
+    writeOutput('<div>Welcome to ${document.title}'
+                '! (v${VERSION})</div>');
+    // TODO: get date from dart:html
+    //writeOutput(new Date().toLocal().toString());
+    writeOutput('<p>Documentation: type "help"</p>');
     
+    
+    var type = persistent ? LocalWindow.PERSISTENT : LocalWindow.TEMPORARY;
+    window.webkitRequestFileSystem(type, 
+        size, 
+        filesystemCallback, 
+        errorHandler);
   }
   
+  void filesystemCallback(filesystem) {
+    DOMFileSystem fs = filesystem; // XXX: dart:html should export this as FileSystem
+    DirectoryEntry cwd = fs.root;
+    
+//    print(filesystem.runtimeType);
+//    print(cwd.runtimeType);
+
+    // Attempt to create a folder to test if we can. 
+    cwd.getDirectory('testquotaforfsfolder', 
+        options: {'create': true},
+        successCallback:  (DirectoryEntry dirEntry){
+          dirEntry.remove(() { // If successfully created, just delete it.
+            // noop.
+          });
+        });
+        //errorCallback: (e) {}); // XXX: getDirectory does not expose errorCallback, file bug. 
+
+//    errorCallback: (e) { // TODO: move to handler, looks messy...
+//      if (e.code == FileError.QUOTA_EXCEEDED_ERR) {
+//        writeOutput('ERROR: Write access to the FileSystem is unavailable. '
+//               'Are you running Google Chrome with ' 
+//               '--unlimited-quota-for-files?');
+//      } else {
+//        errorHandler(e);
+//      }
+//    });
+  }
+  
+  void errorHandler(e) {
+    var msg = '';
+    switch (e.code) {
+      case FileError.QUOTA_EXCEEDED_ERR:
+        msg = 'QUOTA_EXCEEDED_ERR';
+        break;
+      case FileError.NOT_FOUND_ERR:
+        msg = 'NOT_FOUND_ERR';
+        break;
+      case FileError.SECURITY_ERR:
+        msg = 'SECURITY_ERR';
+        break;
+      case FileError.INVALID_MODIFICATION_ERR:
+        msg = 'INVALID_MODIFICATION_ERR';
+        break;
+      case FileError.INVALID_STATE_ERR:
+        msg = 'INVALID_STATE_ERR';
+        break;
+      default:
+        msg = 'Unknown Error';
+        break;
+    };
+    writeOutput('<div>Error: $msg </div>');
+  }
+  
+  void setTheme([String theme='default']) {
+    var currentUrl = window.location.pathname;
+    
+    if (theme == 'default') {
+      // history.replaceState({}, '', currentUrl);
+      window.localStorage.remove('theme');
+      document.body.classes.clear(); // XXX: is this same as, document.body.className = '';
+      return;
+    } else if (theme != null) {
+      document.body.classes.add(theme);
+      window.localStorage['theme'] = theme;
+      //history.replaceState({}, '', currentUrl + '#theme=' + theme);
+    }
+  }
+  
+  void addDroppedFiles(List<File> files) {
+    
+  }
   
   read(var cmd, var fileName, var callback) {
     
@@ -150,26 +236,26 @@ class Terminal {
     });
     sb.add('</div>');
     sb.add('<p>Add files by dragging them from your desktop.</p>');
-    output.insertAdjacentHTML('beforeEnd', sb.toString());
+    writeOutput(sb.toString());
   }
   
   versionCommand(var cmd, var args) {
-    output.insertAdjacentHTML('beforeEnd', "${VERSION}");
+    writeOutput("${VERSION}");
   }
   
   catCommand(var cmd, var args) {
     if (args.length >= 1) {
       var fileName = args[0];      
       if (fileName is String) {
-        // output.insertAdjacentHTML('beforeEnd', 'fileName=${fileName}');
+        writeOutput('fileName=${fileName}');
         read(cmd,fileName, (var result) {
-          output.insertAdjacentHTML('beforeEnd', '<pre> ${result} </pre>');
+          writeOutput('<pre> ${result} </pre>');
         });
       } else {
-        output.insertAdjacentHTML('beforeEnd', 'usage: ${cmd} filename');
+        writeOutput('usage: ${cmd} filename');
       }
     } else {
-      output.insertAdjacentHTML('beforeEnd', 'usage: ${cmd} filename');
+      writeOutput('usage: ${cmd} filename');
     }
   }
   
@@ -178,7 +264,7 @@ class Terminal {
   }
   
   dateCommand(var cmd, var args) {
-    output.insertAdjacentHTML('beforeEnd', new Date.now().toString());
+    writeOutput(new Date.now().toString());
   }
   
   lsCommand(var cmd, var args) {
@@ -215,5 +301,9 @@ class Terminal {
   
   whoCommand(var cmd, var args) {
     
+  }
+  
+  void writeOutput(String h) {
+    output.insertAdjacentHTML('beforeEnd', h);
   }
 }
