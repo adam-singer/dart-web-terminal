@@ -5,6 +5,8 @@
 
 class Terminal {
 
+  DOMFileSystem fs;
+  DirectoryEntry cwd;
   final cmdLineContainer;
   final outputContainer;
   final cmdLineInput; 
@@ -135,8 +137,7 @@ class Terminal {
   void initFS(bool persistent, int size) {
     writeOutput('<div>Welcome to ${document.title}'
                 '! (v${VERSION})</div>');
-    // TODO: get date from dart:html
-    //writeOutput(new Date().toLocal().toString());
+    writeOutput(new Date.now().toLocal().toString());
     writeOutput('<p>Documentation: type "help"</p>');
     
     
@@ -148,8 +149,8 @@ class Terminal {
   }
   
   void filesystemCallback(filesystem) {
-    DOMFileSystem fs = filesystem; // XXX: dart:html should export this as FileSystem
-    DirectoryEntry cwd = fs.root;
+    fs = filesystem; // XXX: dart:html should export this as FileSystem
+    cwd = fs.root;
     
 //    print(filesystem.runtimeType);
 //    print(cwd.runtimeType);
@@ -198,6 +199,18 @@ class Terminal {
         break;
     };
     writeOutput('<div>Error: $msg </div>');
+  }
+  
+  invalidOpForEntryType(FileError error, String cmd, String dest) {
+    if (error.code == FileError.NOT_FOUND_ERR) {
+      writeOutput('$cmd: $dest: No such file or directory<br>');
+    } else if (error.code == FileError.INVALID_STATE_ERR) {
+      writeOutput('$cmd: $dest: Not a directory<br>');
+    } else if (error.code == FileError.INVALID_MODIFICATION_ERR) {
+      writeOutput('$cmd: $dest: File already exists<br>');
+    } else {
+      errorHandler(error);
+    }
   }
   
   void setTheme([String theme='default']) {
@@ -259,20 +272,149 @@ class Terminal {
     }
   }
   
-  cdCommand(var cmd, var args) {
+  cdCommand(String cmd, List<String> args) {
+    args = args == null ? [""] : args;
+    var dest = args.toString();
+    if (dest.isEmpty) {
+      dest = '/';
+    }
     
+    cwd.getDirectory(dest, 
+        options: {}, 
+        successCallback: (DirectoryEntry dirEntry){ 
+          cwd = dirEntry;
+          writeOutput('<div>${dirEntry.fullPath}</div>');
+        },
+        errorCallback: (FileError error) {
+          invalidOpForEntryType(error, cmd, dest);
+        });
   }
   
   dateCommand(var cmd, var args) {
-    writeOutput(new Date.now().toString());
+    writeOutput(new Date.now().toLocal().toString());
   }
   
+  StringBuffer formatColumns(List<Entry> entries) {
+    var maxName = entries[0].name;
+    for (int i = 0; i<entries.length; i++) {
+      if (entries[i].name.length > maxName.length) {
+        maxName = entries[i].name;
+      }
+    }
+    
+    // If we have 3 or less entires, shorten the output container's height.
+    // 15 is the pixel height with a monospace font-size of 12px;
+    var height = entries.length <= 3 ? 'height: ${(entries.length * 15)}px;' : '';
+        
+    // 12px monospace font yields ~7px screen width.
+    var colWidth = maxName.length * 7;
+
+    StringBuffer sb = new StringBuffer();
+    sb.addAll(['<div class="ls-files" style="-webkit-column-width:',
+     colWidth, 'px;', height, '">']);
+    return sb;
+  }
+  
+  Function readEntries;
   lsCommand(var cmd, var args) {
+    Function success = (List<Entry> e) {
+      if (e.length != 0) {
+        
+        StringBuffer html = formatColumns(e);
+        for (int i = 0; i<e.length; i++) {
+          html.addAll(['<span class="', e[i].isDirectory ? 'folder' : 'file','">', e[i].name, '</span><br>']);
+        }
+        html.add('</div>');
+        writeOutput(html.toString());
+      }
+    };
     
+    if (fs == null) {
+      return;
+    }
+    
+    // Read contents of current working directory. According to spec, need to
+    // keep calling readEntries() until length of result array is 0. We're
+    // guarenteed the same entry won't be returned again.
+    var entries = [];
+    DirectoryReader reader = cwd.createReader();
+    readEntries = () {
+      reader.readEntries(
+          (List<Entry> results) {
+            if (results.length == 0) {
+              //entries.sort();
+              success(entries);
+            } else {
+              entries.addAll(results);
+              readEntries();
+            }
+          });
+          //errorCallback: errorHandler);
+    };
+    
+    readEntries();
   }
   
-  mkdirCommand(var cmd, var args) {
+  createDir(rootDirEntry, List<String> folders, [opt_errorCallback = null]) {
+    var errorCallback = opt_errorCallback;
+    if (errorCallback == null) {
+      errorCallback = errorHandler;
+    }
     
+    if (folders.length == 0) {
+      return;
+    }
+    
+    rootDirEntry.getDirectory(folders[0], 
+        options: {'create': true}, 
+        successCallback: (dirEntry) {
+          // Recursively add the new subfolder if we still have a subfolder to create.
+          if (folders.length != 0) {
+//            if (folders.length == 1)  { 
+//              
+//            } else {
+              folders.removeAt(0);
+              createDir(dirEntry, folders);
+//            }
+          }
+        }); // XXX: messed up callback signature 
+        //errorCallback);
+  }
+  
+  mkdirCommand(var cmd, List<String> args) {
+    var dashP = false;
+    var index = args.indexOf('-p');
+    if (index != -1) {
+      args.removeAt(index);
+      dashP = true;
+    }
+    
+    if (args.length == 0) {
+      writeOutput('usage: $cmd [-p] directory<br>');
+      return;
+    }
+    
+    // Create each directory passed as an argument.
+    for(int i=0; i<args.length; i++) {
+      print('args = $args');
+      var dirName = args[i];
+      print('dirName = $dirName');
+      if (dashP) {
+        var folders = dirName.split('/');
+        // Throw out './' or '/' if present on the beginning of our path.
+        if (folders[0] == '.' || folders[0] == '') {
+          //folders = folders.removeAt(0);
+          folders.removeAt(0);
+        }
+        
+        createDir(cwd, folders);
+      } else {
+        cwd.getDirectory(dirName, 
+            options: {'create': true, 'exclusive': true}, 
+            successCallback: (_){}); // XXX: still has that messed up signature. 
+            //(e) { invalidOpForEntryType(e, cmd, dirName); });
+      }
+    }
   }
   
   mvCommand(var cmd, var args) {
@@ -284,7 +426,7 @@ class Terminal {
   }
   
   pwdCommand(var cmd, var args) {
-    
+    writeOutput(cwd.fullPath);
   }
   
   rmCommand(var cmd, var args) {
@@ -300,7 +442,8 @@ class Terminal {
   }
   
   whoCommand(var cmd, var args) {
-    
+    writeOutput('${document.title}'
+    ' - By:  Eric Bidelman &lt;ericbidelman@chromium.org&gt;, Adam Singer &lt;financeCoding@gmail.com&gt;');
   }
   
   void writeOutput(String h) {
