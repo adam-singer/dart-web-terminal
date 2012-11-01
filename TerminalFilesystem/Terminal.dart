@@ -5,7 +5,6 @@ part of terminal_filesystem;
 // print(filesystem.runtimeType); // XXX: does not work on compiling to javascript
 // srcDirEntry.moveTo(destDirEntry); XXX: moveTo complains about incorrect parameters. 
 class Terminal {
-
   DOMFileSystem fs;
   DirectoryEntry cwd;
   String cmdLineContainer;
