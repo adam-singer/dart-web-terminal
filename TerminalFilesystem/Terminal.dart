@@ -15,6 +15,8 @@ class Terminal {
   DivElement cmdLine;
   final VERSION = '0.0.1';
   final THEMES = ['default', 'cream'];
+  List<String> history = [];
+  int histpos = 0;
   Map CMDS;
   Terminal(this.cmdLineContainer,this.outputContainer, this.cmdLineInput) {
     cmdLine = document.query(cmdLineContainer);
@@ -39,103 +41,102 @@ class Terminal {
                   'who':whoCommand
     };
     
-    var history = [];
-    var histpos = 0;
+
     
-    window.on.click.add((var event) {
-      cmdLine.focus();
-    }, false);
-    
+    window.on.click.add((event) => cmdLine.focus());
     // Always force text cursor to end of input line.
-    cmdLine.on.click.add((var event) {
-      
-    }, false);
+   
+    // Always force text cursor to end of input line.
+    cmdLine.on.click.add((event) => document.query(cmdLineInput).value = document.query(cmdLineInput).value);
     
-    cmdLine.on.keyDown.add((KeyboardEvent event) {
-      input = document.query(cmdLineInput);
-      var histtemp = "";
-      // historyHandler
-      if (event.keyCode == 38 || event.keyCode == 40) {
-        event.preventDefault();
-        // up or down
-        if (histpos < history.length) {
-          history[histpos] = input.value;
-        } else {
-          histtemp = input.value;
-        }
-      }
-      
-      if (event.keyCode == 38) { // up
-        histpos--;
-        if (histpos < 0) {
-          histpos = 0;
-        }
-      } else if (event.keyCode == 40) { // down
-        histpos++;
-        if (histpos >= history.length) {
-          histpos = history.length - 1;
-        }
-      }
-      
-      if (event.keyCode == 38 || event.keyCode == 40) {
-        // up or down
-        input.value = history[histpos] ? history[histpos]  : histtemp; 
-      }
-    }, false);
-    
-    cmdLine.on.keyDown.add((KeyboardEvent event) { 
-    
-      // processNewCommand
-      if (event.keyCode == 9) {
-        event.preventDefault();
-      } else if (event.keyCode == 13) { // enter
-        
-        input = document.query(cmdLineInput);
-        
-        if (input.value is String && !input.value.isEmpty) {
-          history.add(input.value);
-          histpos = history.length;
-        }
-        
-        // move the line to output and remove id's
-        DivElement line = input.parent.parent.clone(true);
-        line.attributes.remove('id');
-        line.classes.add('line');
-        var c = line.query(cmdLineInput);
-        c.attributes.remove('id');
-        c.autofocus = false;
-        c.readOnly = true;
-        output.elements.add(line);
-        String cmdline = input.value;
-        input.value = ""; // clear input
-        
-        // Parse out command, args, and trim off whitespace
-        var args;
-        var cmd="";
-        if (cmdline is String) {
-          cmdline.trim();
-          args = cmdline.split(' ');
-          cmd = args[0].toLowerCase();
-          args.removeRange(0, 1);
-        }
-        
-        //switch(cmd) {
-        //   default:
-        //     output.insertAdjacentHTML('beforeEnd', '${cmd}: command not found');
-        //};
-        
-        if (CMDS[cmd] is Function) {
-          CMDS[cmd](cmd,args);
-        } else {
-          writeOutput('${cmd}: command not found');
-        }
-           
-        window.scrollTo(0, window.innerHeight); 
-        
-      }
-    }, false);
+    // Handle up/down key presses for shell history and enter for new command.
+    cmdLine.on.keyDown.add(historyHandler);
+    cmdLine.on.keyDown.add(processNewCommand);
   }
   
+  void historyHandler(KeyboardEvent event) {
+    input = document.query(cmdLineInput);
+    var histtemp = "";
+    // historyHandler
+    if (event.keyCode == 38 || event.keyCode == 40) {
+      event.preventDefault();
+      // up or down
+      if (histpos < history.length) {
+        history[histpos] = input.value;
+      } else {
+        histtemp = input.value;
+      }
+    }
+    
+    if (event.keyCode == 38) { // up
+      histpos--;
+      if (histpos < 0) {
+        histpos = 0;
+      }
+    } else if (event.keyCode == 40) { // down
+      histpos++;
+      if (histpos >= history.length) {
+        histpos = history.length - 1;
+      }
+    }
+    
+    if (event.keyCode == 38 || event.keyCode == 40) {
+      // up or down
+      input.value = history[histpos] != null ? history[histpos]  : histtemp; 
+    }
+  }
+  
+  void processNewCommand(KeyboardEvent event) {
+    // processNewCommand
+    if (event.keyCode == 9) {
+      event.preventDefault();
+    } else if (event.keyCode == 13) { // enter
+      
+      input = document.query(cmdLineInput);
+      
+      if (input.value is String && !input.value.isEmpty) {
+        history.add(input.value);
+        histpos = history.length;
+      }
+      
+      // move the line to output and remove id's
+      DivElement line = input.parent.parent.clone(true);
+      line.attributes.remove('id');
+      line.classes.add('line');
+      var c = line.query(cmdLineInput);
+      c.attributes.remove('id');
+      c.autofocus = false;
+      c.readOnly = true;
+      output.elements.add(line);
+      String cmdline = input.value;
+      input.value = ""; // clear input
+      
+      // Parse out command, args, and trim off whitespace
+      var args;
+      var cmd="";
+      if (cmdline is String) {
+        cmdline.trim();
+        args = cmdline.split(' ');
+        cmd = args[0].toLowerCase();
+        args.removeRange(0, 1);
+      }
+      
+      //switch(cmd) {
+      //   default:
+      //     output.insertAdjacentHTML('beforeEnd', '${cmd}: command not found');
+      //};
+      
+      if (CMDS[cmd] is Function) {
+        CMDS[cmd](cmd,args);
+      } else {
+        writeOutput('${cmd}: command not found');
+      }
+      
+      window.scrollTo(0, window.innerHeight); 
+      
+    }
+  }
+    
   void initFS(bool persistent, int size) {
     writeOutput('<div>Welcome to ${document.title}'
                 '! (v${VERSION})</div>');
