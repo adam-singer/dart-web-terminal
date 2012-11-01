@@ -1,3 +1,4 @@
+part of terminal_filesystem;
 // BUGS TO FILE:
 // DOMFileSystem fs = filesystem; // XXX: dart:html should export this as FileSystem
 // errorCallback: (e) {}); // XXX: getDirectory does not expose errorCallback, file bug. 
@@ -7,14 +8,14 @@ class Terminal {
 
   DOMFileSystem fs;
   DirectoryEntry cwd;
-  final cmdLineContainer;
-  final outputContainer;
-  final cmdLineInput; 
+  String cmdLineContainer;
+  String outputContainer;
+  String cmdLineInput; 
   OutputElement output;
   InputElement input;
   DivElement cmdLine;
-  final version = '0.0.1';
-  final themes = ['default', 'cream'];
+  String version = '0.0.1';
+  List<String> themes = ['default', 'cream'];
   List<String> history = [];
   int histpos = 0;
   Map<String, Function> cmds;
@@ -23,7 +24,7 @@ class Terminal {
   Terminal(this.cmdLineContainer,this.outputContainer, this.cmdLineInput) {
     cmdLine = document.query(cmdLineContainer);
     output = document.query(outputContainer);
-    
+    input = document.query(cmdLineInput);
     cmds = {
                   'clear':clearCommand,
                   'help':helpCommand,
@@ -49,7 +50,7 @@ class Terminal {
     // Always force text cursor to end of input line.
    
     // Always force text cursor to end of input line.
-    cmdLine.on.click.add((event) => document.query(cmdLineInput).value = document.query(cmdLineInput).value);
+    cmdLine.on.click.add((event) => input.value = input.value);
     
     // Handle up/down key presses for shell history and enter for new command.
     cmdLine.on.keyDown.add(historyHandler);
@@ -57,7 +58,6 @@ class Terminal {
   }
   
   void historyHandler(KeyboardEvent event) {
-    input = document.query(cmdLineInput);
     var histtemp = "";
     // historyHandler
     if (event.keyCode == 38 || event.keyCode == 40) {
@@ -89,12 +89,9 @@ class Terminal {
   }
   
   void processNewCommand(KeyboardEvent event) {
-    // processNewCommand
     if (event.keyCode == 9) {
       event.preventDefault();
     } else if (event.keyCode == 13) { // enter
-      
-      input = document.query(cmdLineInput);
       
       if (input.value is String && !input.value.isEmpty) {
         history.add(input.value);
@@ -147,34 +144,30 @@ class Terminal {
         errorHandler);
   }
   
-  void filesystemCallback(filesystem) {
-    fs = filesystem; // XXX: dart:html should export this as FileSystem
+  void filesystemCallback(DOMFileSystem filesystem) {
+    fs = filesystem;
     cwd = fs.root;
     
     // Attempt to create a folder to test if we can. 
     cwd.getDirectory('testquotaforfsfolder', 
         options: {'create': true},
         successCallback:  (DirectoryEntry dirEntry){
-          dirEntry.remove(() { // If successfully created, just delete it.
-            // noop.
-          });
-        });
-        //errorCallback: (e) {}); // XXX: getDirectory does not expose errorCallback, file bug. 
-
-//    errorCallback: (e) { // TODO: move to handler, looks messy...
-//      if (e.code == FileError.QUOTA_EXCEEDED_ERR) {
-//        writeOutput('ERROR: Write access to the FileSystem is unavailable. '
-//               'Are you running Google Chrome with ' 
-//               '--unlimited-quota-for-files?');
-//      } else {
-//        errorHandler(e);
-//      }
-//    });
+          dirEntry.remove(() {}); // If successfully created, just delete it.          
+        },
+        errorCallback: (error) {
+          if (error.code == FileError.QUOTA_EXCEEDED_ERR) {
+            writeOutput('ERROR: Write access to the FileSystem is unavailable. '
+                   'Are you running Google Chrome with ' 
+                   '--unlimited-quota-for-files?');
+          } else {
+            errorHandler(error);
+          }
+        }); 
   }
   
-  void errorHandler(e) {
+  void errorHandler(error) {
     var msg = '';
-    switch (e.code) {
+    switch (error.code) {
       case FileError.QUOTA_EXCEEDED_ERR:
         msg = 'QUOTA_EXCEEDED_ERR';
         break;
@@ -218,7 +211,7 @@ class Terminal {
     if (theme == 'default') {
       // history.replaceState({}, '', currentUrl);
       window.localStorage.remove('theme');
-      document.body.classes.clear(); // XXX: is this same as, document.body.className = '';
+      document.body.classes.clear();
       return;
     } else if (theme != null) {
       document.body.classes.add(theme);
@@ -235,9 +228,9 @@ class Terminal {
             fileEntry.createWriter((FileWriter fileWriter) {
               fileWriter.on.error.add((e)=>errorHandler(e));
               fileWriter.write(file);
-            }, (e) => errorHandler(e));
+            }, (error) => errorHandler(error));
           }, 
-          errorCallback: (e) => errorHandler(e));
+          errorCallback: (error) => errorHandler(error));
     });
   }
   
@@ -251,17 +244,17 @@ class Terminal {
         successCallback: (FileEntry fileEntry) {
           fileEntry.file((file) {
             var reader = new FileReader();
-            reader.on.loadEnd.add((ProgressEvent e)=>callback(reader.result));
+            reader.on.loadEnd.add((ProgressEvent event)=>callback(reader.result));
             reader.readAsText(file);
-          }, (e) => errorHandler(e));
+          }, (error) => errorHandler(error));
         }, 
-        errorCallback: (e) {
-          if (e.code == FileError.INVALID_STATE_ERR) {
+        errorCallback: (error) {
+          if (error.code == FileError.INVALID_STATE_ERR) {
             writeOutput('$cmd: $path: is a directory<br>');
-          } else if (e.code == FileError.NOT_FOUND_ERR) {
+          } else if (error.code == FileError.NOT_FOUND_ERR) {
             writeOutput('$cmd: $path: No such file or directory<br>');
           } else {
-            errorHandler(e);
+            errorHandler(error);
           }
         });
   }
@@ -274,9 +267,7 @@ class Terminal {
   void helpCommand(String cmd, List<String> args) {
     StringBuffer sb = new StringBuffer();
     sb.add('<div class="ls-files">');
-    cmds.keys.forEach((var k) {
-      sb.add('${k}<br>');
-    });
+    cmds.keys.forEach((key) => sb.add('${key}<br>'));
     sb.add('</div>');
     sb.add('<p>Add files by dragging them from your desktop.</p>');
     writeOutput(sb.toString());
@@ -306,6 +297,7 @@ class Terminal {
     StringBuffer sb = new StringBuffer();
     sb.addAll(args);
     var dest = sb.toString();
+    
     if (dest.isEmpty) {
       dest = '/';
     }
@@ -347,7 +339,7 @@ class Terminal {
   }
   
   
-  void lsCommand(var cmd, var args) {
+  void lsCommand(String cmd, List<String> args) {
     Function success = (List<Entry> e) {
       if (e.length != 0) {
         
@@ -379,19 +371,13 @@ class Terminal {
               entries.addAll(results);
               readEntries();
             }
-          });
-          //errorCallback: errorHandler);
+          }, (error) => errorHandler(error));
     };
     
     readEntries();
   }
   
-  void createDir(rootDirEntry, List<String> folders, [opt_errorCallback = null]) {
-    var errorCallback = opt_errorCallback;
-    if (errorCallback == null) {
-      errorCallback = errorHandler;
-    }
-    
+  void createDir(rootDirEntry, List<String> folders) {    
     if (folders.length == 0) {
       return;
     }
@@ -401,18 +387,13 @@ class Terminal {
         successCallback: (dirEntry) {
           // Recursively add the new subfolder if we still have a subfolder to create.
           if (folders.length != 0) {
-//            if (folders.length == 1)  { 
-//              
-//            } else {
               folders.removeAt(0);
               createDir(dirEntry, folders);
-//            }
           }
-        }); // XXX: messed up callback signature 
-        //errorCallback);
+        }, errorCallback: (error) => errorHandler(error));
   }
   
-  void mkdirCommand(var cmd, List<String> args) {
+  void mkdirCommand(String cmd, List<String> args) {
     var dashP = false;
     var index = args.indexOf('-p');
     if (index != -1) {
@@ -461,24 +442,14 @@ class Terminal {
     
     Function runAction = (c, srcDirEntry, destDirEntry, [opt_newName = null]) {
       String newName = "";
-      if (opt_newName != null) newName = opt_newName;
+      if (opt_newName != null) { 
+        newName = opt_newName;
+      }
       
       if (c == 'mv') {
         srcDirEntry.moveTo(destDirEntry); 
-        // XXX: moveTo complains about incorrect parameters. 
-//            name: destDirEntry.name,
-//            // UNIX doesn't display output on successful move.
-//            successCallback: (e) { return; },
-//            errorCallback: (e) => errorHandler(e) 
-//            );
       } else { // c=='cp'
         srcDirEntry.copyTo(destDirEntry);
-        // XXX: copyTo complains about incorrect parameters. 
-//        name: destDirEntry.name,
-//            // UNIX doesn't display output on successful move.
-//            successCallback: (e) {},
-//            errorCallback: (e) => errorHandler(e) 
-//            );
       }
     };
     
@@ -529,11 +500,11 @@ class Terminal {
     cwd.getFile(path, 
         options: {}, 
         successCallback: successCallback, 
-        errorCallback: (e) {
-          if (e.code == FileError.NOT_FOUND_ERR) {
+        errorCallback: (error) {
+          if (error.code == FileError.NOT_FOUND_ERR) {
             writeOutput('$cmd: $path: No such file or directory<br>');
           } else {
-            errorHandler(e);
+            errorHandler(error);
           }
         });
   }
@@ -556,18 +527,18 @@ class Terminal {
     args.forEach((fileName) {
       cwd.getFile(fileName, options: {}, 
           successCallback: (fileEntry) {
-            fileEntry.remove(() {}, (e) => errorHandler(e)); 
+            fileEntry.remove(() {}, (error) => errorHandler(error)); 
           }, 
-          errorCallback: (e){
-            if (recursive && e.code == FileError.TYPE_MISMATCH_ERR) {
+          errorCallback: (error){
+            if (recursive && error.code == FileError.TYPE_MISMATCH_ERR) {
               cwd.getDirectory(fileName, 
                   options:{}, 
-                  successCallback: (DirectoryEntry dirEntry) => dirEntry.removeRecursively(() {}, (e) => errorHandler(e)), 
-                  errorCallback: (e) => errorHandler(e));
-            } else if (e.code == FileError.INVALID_STATE_ERR) {
+                  successCallback: (DirectoryEntry dirEntry) => dirEntry.removeRecursively(() {}, (error) => errorHandler(error)), 
+                  errorCallback: (error) => errorHandler(error));
+            } else if (error.code == FileError.INVALID_STATE_ERR) {
               writeOutput('$cmd: $fileName: is a directory<br>');
             } else {
-              errorHandler(e);
+              errorHandler(error);
             }
           });
     });
@@ -578,15 +549,15 @@ class Terminal {
       cwd.getDirectory(dirName, 
           options: {}, 
           successCallback: (dirEntry) {
-            dirEntry.remove((){}, (e) {
-              if (e.code == FileError.INVALID_MODIFICATION_ERR) {
+            dirEntry.remove((){}, (error) {
+              if (error.code == FileError.INVALID_MODIFICATION_ERR) {
                 writeOutput('$cmd: $dirName: Directory not empty<br>');
               } else {
-                errorHandler(e);
+                errorHandler(error);
               }
             }); 
           }, 
-          errorCallback: (e) => invalidOpForEntryType(e, cmd, dirName));
+          errorCallback: (error) => invalidOpForEntryType(error, cmd, dirName));
     });
   }
   
@@ -605,7 +576,7 @@ class Terminal {
     }
   }
   
-  void whoCommand(var cmd, var args) {
+  void whoCommand(String cmd, List<String> args) {
     writeOutput('${document.title}'
     ' - By:  Eric Bidelman &lt;ericbidelman@chromium.org&gt;, Adam Singer &lt;financeCoding@gmail.com&gt;');
   }

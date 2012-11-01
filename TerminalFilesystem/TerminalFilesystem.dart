@@ -1,17 +1,15 @@
-#import('dart:core');
-#import('dart:html');
-#source('Terminal.dart');
+library terminal_filesystem;
+import 'dart:core';
+import 'dart:html';
+part 'Terminal.dart';
 
 class TerminalFilesystem {
   Terminal term;
-  TerminalFilesystem() {
-  }
 
   void run() {
     term = new Terminal('#input-line', '#output', '#cmdline');
     term.initFS(false, 1024 * 1024);
     
-    print('window.location.hash = ${window.location.hash}');
     if (!window.location.hash.isEmpty) {
       var theme = window.location.hash.substring(1, window.location.hash.length).split('=')[1];
       term.setTheme(theme);
@@ -21,26 +19,26 @@ class TerminalFilesystem {
     
     // Setup the DnD listeners for file drop. 
     var body = document.body;
-    body.on.dragEnter.add(_onDragEnter, false);
-    body.on.dragOver.add(_onDragOver, false);
-    body.on.drop.add(_onDrop, false);
+    body.on.dragEnter.add(onDragEnter, false);
+    body.on.dragOver.add(onDragOver, false);
+    body.on.drop.add(onDrop, false);
   }
   
-  void _onDragEnter(MouseEvent event) {
+  void onDragEnter(MouseEvent event) {
     event.stopPropagation();
     event.preventDefault();
     Element dropTarget = event.target;
     dropTarget.classes.add('dropping');
   }
   
-  void _onDragOver(MouseEvent event) {
+  void onDragOver(MouseEvent event) {
     event.stopPropagation();
     event.preventDefault();
     // Explicitly show this is a copy.
     event.dataTransfer.dropEffect = 'copy'; 
   }
   
-  void _onDrop(MouseEvent event) {
+  void onDrop(MouseEvent event) {
     event.stopPropagation();
     event.preventDefault();
     Element dropTarget = event.target;
