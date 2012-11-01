@@ -13,16 +13,18 @@ class Terminal {
   OutputElement output;
   InputElement input;
   DivElement cmdLine;
-  final VERSION = '0.0.1';
-  final THEMES = ['default', 'cream'];
+  final version = '0.0.1';
+  final themes = ['default', 'cream'];
   List<String> history = [];
   int histpos = 0;
-  Map CMDS;
+  Map<String, Function> cmds;
+  Function readEntries;
+  
   Terminal(this.cmdLineContainer,this.outputContainer, this.cmdLineInput) {
     cmdLine = document.query(cmdLineContainer);
     output = document.query(outputContainer);
     
-    CMDS = {
+    cmds = {
                   'clear':clearCommand,
                   'help':helpCommand,
                   'version':versionCommand,       
@@ -103,7 +105,7 @@ class Terminal {
       DivElement line = input.parent.parent.clone(true);
       line.attributes.remove('id');
       line.classes.add('line');
-      var c = line.query(cmdLineInput);
+      InputElement c = line.query(cmdLineInput);
       c.attributes.remove('id');
       c.autofocus = false;
       c.readOnly = true;
@@ -112,8 +114,8 @@ class Terminal {
       input.value = ""; // clear input
       
       // Parse out command, args, and trim off whitespace
-      var args;
-      var cmd="";
+      List<String> args;
+      String cmd="";
       if (cmdline is String) {
         cmdline.trim();
         args = cmdline.split(' ');
@@ -121,28 +123,22 @@ class Terminal {
         args.removeRange(0, 1);
       }
       
-      //switch(cmd) {
-      //   default:
-      //     output.insertAdjacentHTML('beforeEnd', '${cmd}: command not found');
-      //};
-      
-      if (CMDS[cmd] is Function) {
-        CMDS[cmd](cmd,args);
+      // function look up
+      if (cmds[cmd] is Function) {
+        cmds[cmd](cmd,args);
       } else {
         writeOutput('${cmd}: command not found');
       }
       
-      window.scrollTo(0, window.innerHeight); 
-      
+      window.scrollTo(0, window.innerHeight);  
     }
   }
     
   void initFS(bool persistent, int size) {
     writeOutput('<div>Welcome to ${document.title}'
-                '! (v${VERSION})</div>');
+                '! (v${version})</div>');
     writeOutput(new Date.now().toLocal().toString());
     writeOutput('<p>Documentation: type "help"</p>');
-    
     
     var type = persistent ? LocalWindow.PERSISTENT : LocalWindow.TEMPORARY;
     window.webkitRequestFileSystem(type, 
@@ -155,9 +151,6 @@ class Terminal {
     fs = filesystem; // XXX: dart:html should export this as FileSystem
     cwd = fs.root;
     
-//    print(filesystem.runtimeType);
-//    print(cwd.runtimeType);
-
     // Attempt to create a folder to test if we can. 
     cwd.getDirectory('testquotaforfsfolder', 
         options: {'create': true},
@@ -207,7 +200,7 @@ class Terminal {
     writeOutput('<div>Error: $msg </div>');
   }
   
-  invalidOpForEntryType(FileError error, String cmd, String dest) {
+  void invalidOpForEntryType(FileError error, String cmd, String dest) {
     if (error.code == FileError.NOT_FOUND_ERR) {
       writeOutput('$cmd: $dest: No such file or directory<br>');
     } else if (error.code == FileError.INVALID_STATE_ERR) {
@@ -248,7 +241,7 @@ class Terminal {
     });
   }
   
-  read(String cmd, String path, var callback) {
+  void read(String cmd, String path, var callback) {
     if (fs == null) {
       return;
     }
@@ -273,15 +266,15 @@ class Terminal {
         });
   }
   
-  clearCommand(var cmd, var args) {
+  void clearCommand(String cmd, List<String> args) {
     output.innerHTML = '';
     input.value = '';
   }
   
-  helpCommand(var cmd, var args) {
+  void helpCommand(String cmd, List<String> args) {
     StringBuffer sb = new StringBuffer();
     sb.add('<div class="ls-files">');
-    CMDS.keys.forEach((var k) {
+    cmds.keys.forEach((var k) {
       sb.add('${k}<br>');
     });
     sb.add('</div>');
@@ -289,16 +282,15 @@ class Terminal {
     writeOutput(sb.toString());
   }
   
-  versionCommand(String cmd, var args) {
-    writeOutput("${VERSION}");
+  void versionCommand(String cmd, List<String> args) {
+    writeOutput("${version}");
   }
   
-  catCommand(String cmd, var args) {
+  void catCommand(String cmd, List<String> args) {
     if (args.length >= 1) {
       var fileName = args[0];      
       if (fileName is String) {
-        //writeOutput('fileName=${fileName}');
-        read(cmd, fileName, (var result) {
+        read(cmd, fileName, (result) {
           writeOutput('<pre> ${result} </pre>');
         });
       } else {
@@ -309,7 +301,7 @@ class Terminal {
     }
   }
   
-  cdCommand(String cmd, List<String> args) {
+  void cdCommand(String cmd, List<String> args) {
     args = args == null ? [""] : args;
     StringBuffer sb = new StringBuffer();
     sb.addAll(args);
@@ -329,7 +321,7 @@ class Terminal {
         });
   }
   
-  dateCommand(String cmd, var args) {
+  void dateCommand(String cmd, var args) {
     writeOutput(new Date.now().toLocal().toString());
   }
   
@@ -354,8 +346,8 @@ class Terminal {
     return sb;
   }
   
-  Function readEntries;
-  lsCommand(var cmd, var args) {
+  
+  void lsCommand(var cmd, var args) {
     Function success = (List<Entry> e) {
       if (e.length != 0) {
         
@@ -375,7 +367,7 @@ class Terminal {
     // Read contents of current working directory. According to spec, need to
     // keep calling readEntries() until length of result array is 0. We're
     // guarenteed the same entry won't be returned again.
-    var entries = [];
+    List<Entry> entries = [];
     DirectoryReader reader = cwd.createReader();
     readEntries = () {
       reader.readEntries(
@@ -394,7 +386,7 @@ class Terminal {
     readEntries();
   }
   
-  createDir(rootDirEntry, List<String> folders, [opt_errorCallback = null]) {
+  void createDir(rootDirEntry, List<String> folders, [opt_errorCallback = null]) {
     var errorCallback = opt_errorCallback;
     if (errorCallback == null) {
       errorCallback = errorHandler;
@@ -420,7 +412,7 @@ class Terminal {
         //errorCallback);
   }
   
-  mkdirCommand(var cmd, List<String> args) {
+  void mkdirCommand(var cmd, List<String> args) {
     var dashP = false;
     var index = args.indexOf('-p');
     if (index != -1) {
@@ -435,14 +427,12 @@ class Terminal {
     
     // Create each directory passed as an argument.
     for(int i=0; i<args.length; i++) {
-      print('args = $args');
-      var dirName = args[i];
-      print('dirName = $dirName');
+      String dirName = args[i];
+      
       if (dashP) {
         var folders = dirName.split('/');
         // Throw out './' or '/' if present on the beginning of our path.
         if (folders[0] == '.' || folders[0] == '') {
-          //folders = folders.removeAt(0);
           folders.removeAt(0);
         }
         
@@ -450,13 +440,15 @@ class Terminal {
       } else {
         cwd.getDirectory(dirName, 
             options: {'create': true, 'exclusive': true}, 
-            successCallback: (_){}); // XXX: still has that messed up signature. 
-            //(e) { invalidOpForEntryType(e, cmd, dirName); });
+            successCallback: (_){},
+            errorCallback: (FileError error) {
+              invalidOpForEntryType(error, cmd, dirName);
+            });
       }
     }
   }
   
-  mvCommand(String cmd, List<String> args) {
+  void mvCommand(String cmd, List<String> args) {
     if (args.length != 2) {
       writeOutput('usage: $cmd source target<br>'
                   '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$cmd'
@@ -464,11 +456,11 @@ class Terminal {
       return;
     }
     
-    var src = args[0];
-    var dest = args[1];
+    String src = args[0];
+    String dest = args[1];
     
     Function runAction = (c, srcDirEntry, destDirEntry, [opt_newName = null]) {
-      var newName = "";
+      String newName = "";
       if (opt_newName != null) newName = opt_newName;
       
       if (c == 'mv') {
@@ -494,27 +486,27 @@ class Terminal {
     if (dest[dest.length - 1] == '/') {
       cwd.getDirectory(src, 
           options: {}, 
-          successCallback: (srcDirEntry){
+          successCallback: (DirectoryEntry srcDirEntry){
             // Create blacklist for dirs we can't re-create.
             var create = ['.', './', '..', '../', '/'].indexOf(dest) != -1 ? false : true;
             
             cwd.getDirectory(dest, 
                 options: {'create': create}, 
-                successCallback: (destDirEntry) => runAction(cmd, srcDirEntry, destDirEntry), 
-                errorCallback: (error) => errorHandler(error));
+                successCallback: (DirectoryEntry destDirEntry) => runAction(cmd, srcDirEntry, destDirEntry), 
+                errorCallback: (FileError error) => errorHandler(error));
           }, 
-          errorCallback: (error) => errorHandler(error));
+          errorCallback: (FileError error) => errorHandler(error));
     } else { // Treat src/destination as files.
       cwd.getFile(src, options: {}, 
-          successCallback: (srcFileEntry) {
-            srcFileEntry.getParent((parentDirEntry) => runAction(cmd, srcFileEntry, parentDirEntry, dest),
-                (error) => errorHandler(error));
+          successCallback: (DirectoryEntry srcFileEntry) {
+            srcFileEntry.getParent((DirectoryEntry parentDirEntry) => runAction(cmd, srcFileEntry, parentDirEntry, dest),
+                (FileError error) => errorHandler(error));
           }, 
-          errorCallback: (error) => errorHandler(error));
+          errorCallback: (FileError error) => errorHandler(error));
     }
   }
   
-  openCommand(String cmd, List<String> args) {
+  void openCommand(String cmd, List<String> args) {
     StringBuffer sb = new StringBuffer();
     sb.addAll(args);
     var fileName = sb.toString();
@@ -524,12 +516,12 @@ class Terminal {
       return;
     }
     
-    open(cmd, fileName, (fileEntry) {
+    open(cmd, fileName, (FileEntry fileEntry) {
       var myWin = window.open(fileEntry.toURL(), 'mywin');
     });
   }
   
-  open(String cmd, String path, successCallback) {
+  void open(String cmd, String path, successCallback) {
     if (fs == null) {
       return;
     }
@@ -546,11 +538,11 @@ class Terminal {
         });
   }
   
-  pwdCommand(String cmd, List<String> args) {
+  void pwdCommand(String cmd, List<String> args) {
     writeOutput(cwd.fullPath);
   }
   
-  rmCommand(String cmd, List<String> args) {
+  void rmCommand(String cmd, List<String> args) {
     // Remove recursively? If so, remove the flag(s) from the arg list.
     var recursive = false;
     ['-r', '-f', '-rf', '-fr'].forEach((arg) {
@@ -581,7 +573,7 @@ class Terminal {
     });
   }
   
-  rmdirCommand(String cmd, List<String> args) {
+  void rmdirCommand(String cmd, List<String> args) {
     args.forEach((dirName) {
       cwd.getDirectory(dirName, 
           options: {}, 
@@ -598,14 +590,14 @@ class Terminal {
     });
   }
   
-  themeCommand(String cmd, List<String> args) {
+  void themeCommand(String cmd, List<String> args) {
     StringBuffer sb = new StringBuffer();
     sb.addAll(args);
     var theme = sb.toString();
     if (theme.isEmpty) {
-      writeOutput('usage: $cmd ${THEMES}');
+      writeOutput('usage: $cmd ${themes}');
     } else {
-      if (THEMES.contains(theme)) {
+      if (themes.contains(theme)) {
         setTheme(theme);
       } else {
         writeOutput('Error - Unrecognized theme used');
@@ -613,7 +605,7 @@ class Terminal {
     }
   }
   
-  whoCommand(var cmd, var args) {
+  void whoCommand(var cmd, var args) {
     writeOutput('${document.title}'
     ' - By:  Eric Bidelman &lt;ericbidelman@chromium.org&gt;, Adam Singer &lt;financeCoding@gmail.com&gt;');
   }
